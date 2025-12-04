@@ -143,6 +143,25 @@ class IdentityController(OpenAccessController):
             status_code=status_codes.HTTP_200_OK,
         )
 
+    @post(Endpoint.COMMITMENTS)
+    async def set_commitment_endpoint(
+        self, bt_client: AbstractBittensorClient, data: SetCommitmentRequest, netuid: NetUid
+    ) -> Response:
+        """
+        Set a commitment (model metadata) on chain for the wallet's hotkey.
+
+        Raises:
+            BadGatewayException: When commitment could not be set after all retries.
+        """
+        try:
+            await SetCommitment(bt_client).execute(netuid, data.commitment)
+        except RuntimeError as exc:
+            raise BadGatewayException(detail=str(exc)) from exc
+        return Response(
+            {"detail": "Commitment set successfully."},
+            status_code=status_codes.HTTP_201_CREATED,
+        )
+
     @handler(Endpoint.CERTIFICATES_SELF)
     async def get_own_certificate_endpoint(self, bt_client: AbstractBittensorClient, netuid: NetUid) -> Response:
         """
@@ -173,22 +192,3 @@ class IdentityController(OpenAccessController):
             raise BadGatewayException(detail="Could not generate certificate pair.")
 
         return Response(certificate_keypair, status_code=status_codes.HTTP_201_CREATED)
-
-    @post(Endpoint.COMMITMENTS)
-    async def set_commitment_endpoint(
-        self, bt_client: AbstractBittensorClient, data: SetCommitmentRequest, netuid: NetUid
-    ) -> Response:
-        """
-        Set a commitment (model metadata) on chain for the wallet's hotkey.
-
-        Raises:
-            BadGatewayException: When commitment could not be set after all retries.
-        """
-        try:
-            await SetCommitment.execute(bt_client, netuid, data.commitment)
-        except RuntimeError as exc:
-            raise BadGatewayException(detail=str(exc)) from exc
-        return Response(
-            {"detail": "Commitment set successfully."},
-            status_code=status_codes.HTTP_201_CREATED,
-        )

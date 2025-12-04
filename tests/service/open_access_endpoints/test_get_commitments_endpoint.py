@@ -17,8 +17,8 @@ from tests.mock_bittensor_client import MockBittensorClient
     [
         pytest.param(
             {
-                Hotkey("hotkey1"): CommitmentDataHex("01020304"),
-                Hotkey("hotkey2"): CommitmentDataHex("05060708"),
+                Hotkey("hotkey1"): CommitmentDataHex("0x01020304"),
+                Hotkey("hotkey2"): CommitmentDataHex("0x05060708"),
             },
             id="multiple_commitments",
         ),

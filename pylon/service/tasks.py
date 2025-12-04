@@ -136,14 +136,7 @@ class SetCommitment:
     def __init__(self, client: AbstractBittensorClient):
         self._client: AbstractBittensorClient = client
 
-    @classmethod
-    async def execute(
-        cls, client: AbstractBittensorClient, netuid: NetUid, data: CommitmentDataBytes
-    ) -> None:
-        instance = cls(client)
-        await instance._run(netuid, data)
-
-    async def _run(self, netuid: NetUid, data: CommitmentDataBytes) -> None:
+    async def execute(self, netuid: NetUid, data: CommitmentDataBytes) -> None:
         retry_count = settings.commitment_retry_attempts
         next_sleep_seconds = settings.commitment_retry_delay_seconds
         max_sleep_seconds = next_sleep_seconds * 10

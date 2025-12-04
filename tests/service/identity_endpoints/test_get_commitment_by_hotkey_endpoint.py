@@ -17,7 +17,7 @@ async def test_get_commitment_identity_success(test_client: AsyncTestClient, sn1
     Test getting a specific commitment successfully.
     """
     hotkey = "hotkey1"
-    commitment = Commitment(hotkey=Hotkey(hotkey), commitment=CommitmentDataHex("0102030405060708"))
+    commitment = Commitment(hotkey=Hotkey(hotkey), commitment=CommitmentDataHex("0x0102030405060708"))
     async with sn1_mock_bt_client.mock_behavior(
         get_latest_block=[Block(number=BlockNumber(1000), hash=BlockHash("0xabc123"))],
         get_commitment=[commitment],

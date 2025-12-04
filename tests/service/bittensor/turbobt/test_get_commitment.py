@@ -25,7 +25,7 @@ async def test_turbobt_client_get_commitment(turbobt_client, subnet_spec, test_b
     result = await turbobt_client.get_commitment(netuid=1, block=test_block, hotkey=hotkey)
     assert result == Commitment(
         hotkey=hotkey,
-        commitment=CommitmentDataHex("deadbeef"),
+        commitment=CommitmentDataHex("0xdeadbeef"),
     )
     subnet_spec.commitments.get.assert_called_once_with(hotkey, block_hash=test_block.hash)
 

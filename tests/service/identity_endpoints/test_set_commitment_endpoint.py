@@ -87,6 +87,39 @@ async def test_set_commitment_identity_blockchain_error(
 
 
 @pytest.mark.asyncio
+async def test_set_commitment_identity_retries_on_failure(
+    test_client: AsyncTestClient, sn1_mock_bt_client: MockBittensorClient, monkeypatch
+):
+    """
+    Test that set_commitment retries on transient failures and succeeds when blockchain recovers.
+    """
+    # Set retry attempts to 2 and minimal delay for faster test
+    monkeypatch.setattr("pylon.service.tasks.settings.commitment_retry_attempts", 2)
+    monkeypatch.setattr("pylon.service.tasks.settings.commitment_retry_delay_seconds", 0.01)
+
+    commitment_data = "0102030405060708"
+
+    async with sn1_mock_bt_client.mock_behavior(
+        set_commitment=[
+            RuntimeError("First failure"),
+            RuntimeError("Second failure"),
+            None,  # Third attempt succeeds
+        ],
+    ):
+        response = await test_client.post(
+            "/api/v1/identity/sn1/subnet/1/commitments",
+            json={"commitment": commitment_data},
+        )
+
+    assert response.status_code == HTTP_201_CREATED
+    assert response.json() == {
+        "detail": "Commitment set successfully.",
+    }
+    # Verify set_commitment was called 3 times (2 failures + 1 success)
+    assert len(sn1_mock_bt_client.calls["set_commitment"]) == 3
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("invalid_data", "expected_message"),
     [
