@@ -165,4 +165,6 @@ class SetCommitment:
                     next_sleep_seconds = min(next_sleep_seconds * 2, max_sleep_seconds)
 
         logger.error(f"Failed to set commitment after {retry_count + 1} attempts: {last_exception}")
-        raise RuntimeError(f"Failed to set commitment after {retry_count + 1} attempts: {last_exception}") from last_exception
+        raise RuntimeError(
+            f"Failed to set commitment after {retry_count + 1} attempts: {last_exception}"
+        ) from last_exception
