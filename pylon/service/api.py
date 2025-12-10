@@ -1,29 +1,54 @@
 import logging
 
-from litestar import Controller, Response, get, post, put, status_codes
+from litestar import Controller, Response, status_codes
 from litestar.di import Provide
 from litestar.exceptions import NotFoundException
+from litestar.handlers.http_handlers import decorators as http_decorators
 
+from pylon._internal.common.bodies import LoginBody, SetWeightsBody
 from pylon._internal.common.endpoints import Endpoint
 from pylon._internal.common.models import Hotkey, SubnetNeurons
 from pylon._internal.common.requests import (
     GenerateCertificateKeypairRequest,
-    SetWeightsRequest,
 )
+from pylon._internal.common.responses import IdentityLoginResponse
 from pylon._internal.common.types import BlockNumber, NetUid
 from pylon.service.bittensor.client import AbstractBittensorClient
 from pylon.service.dependencies import bt_client_identity_dep, bt_client_open_access_dep, identity_dep
 from pylon.service.exceptions import BadGatewayException
+from pylon.service.identities import Identity
 from pylon.service.tasks import ApplyWeights
 
 logger = logging.getLogger(__name__)
+
+
+def handler(endpoint: Endpoint, **kwargs):
+    """
+    Decorator to create litestar handlers using endpoints defined in Endpoint enum.
+    It is encouraged to define handlers with Endpoint enum so that Pylon service can share endpoint info
+    with Pylon client.
+    The decorator automatically sets the proper url, name and method for the endpoint,
+    other kwargs may be set by passing them to this decorator.
+    """
+    method = getattr(http_decorators, endpoint.method.lower())
+    return method(endpoint.url, name=endpoint.reverse, **kwargs)
+
+
+@handler(
+    Endpoint.IDENTITY_LOGIN,
+    dependencies={"identity": identity_dep},
+    status_code=status_codes.HTTP_200_OK,
+)
+async def identity_login(data: LoginBody, identity: Identity) -> IdentityLoginResponse:
+    # TODO: Add real authentication and session.
+    return IdentityLoginResponse(netuid=identity.netuid, identity_name=identity.identity_name)
 
 
 class OpenAccessController(Controller):
     path = "/subnet/{netuid:int}/"
     dependencies = {"bt_client": Provide(bt_client_open_access_dep)}
 
-    @get(Endpoint.NEURONS)
+    @handler(Endpoint.NEURONS)
     async def get_neurons(
         self, bt_client: AbstractBittensorClient, block_number: BlockNumber, netuid: NetUid
     ) -> SubnetNeurons:
@@ -40,12 +65,12 @@ class OpenAccessController(Controller):
             raise NotFoundException(detail=f"Block {block_number} not found.")
         return await bt_client.get_neurons(netuid, block=block)
 
-    @get(Endpoint.LATEST_NEURONS)
+    @handler(Endpoint.LATEST_NEURONS)
     async def get_latest_neurons(self, bt_client: AbstractBittensorClient, netuid: NetUid) -> SubnetNeurons:
         block = await bt_client.get_latest_block()
         return await bt_client.get_neurons(netuid, block=block)
 
-    @get(Endpoint.CERTIFICATES)
+    @handler(Endpoint.CERTIFICATES)
     async def get_certificates_endpoint(self, bt_client: AbstractBittensorClient, netuid: NetUid) -> Response:
         """
         Get all certificates for the subnet at the latest block.
@@ -55,7 +80,7 @@ class OpenAccessController(Controller):
 
         return Response(certificates, status_code=status_codes.HTTP_200_OK)
 
-    @get(Endpoint.CERTIFICATES_HOTKEY)
+    @handler(Endpoint.CERTIFICATES_HOTKEY)
     async def get_certificate_endpoint(
         self, hotkey: Hotkey, bt_client: AbstractBittensorClient, netuid: NetUid
     ) -> Response:
@@ -77,9 +102,9 @@ class IdentityController(OpenAccessController):
     path = "/identity/{identity_name:str}/subnet/{netuid:int}"
     dependencies = {"identity": Provide(identity_dep), "bt_client": Provide(bt_client_identity_dep)}
 
-    @put(Endpoint.SUBNET_WEIGHTS)
+    @handler(Endpoint.SUBNET_WEIGHTS)
     async def put_weights_endpoint(
-        self, data: SetWeightsRequest, bt_client: AbstractBittensorClient, netuid: NetUid
+        self, data: SetWeightsBody, bt_client: AbstractBittensorClient, netuid: NetUid
     ) -> Response:
         """
         Set multiple hotkeys' weights for the current epoch in a single transaction.
@@ -94,7 +119,7 @@ class IdentityController(OpenAccessController):
             status_code=status_codes.HTTP_200_OK,
         )
 
-    @get(Endpoint.CERTIFICATES_SELF)
+    @handler(Endpoint.CERTIFICATES_SELF)
     async def get_own_certificate_endpoint(self, bt_client: AbstractBittensorClient, netuid: NetUid) -> Response:
         """
         Get a certificate for the identity's wallet.
@@ -109,7 +134,7 @@ class IdentityController(OpenAccessController):
 
         return Response(certificate, status_code=status_codes.HTTP_200_OK)
 
-    @post(Endpoint.CERTIFICATES_SELF)
+    @handler(Endpoint.CERTIFICATES_GENERATE)
     async def generate_certificate_keypair_endpoint(
         self, bt_client: AbstractBittensorClient, data: GenerateCertificateKeypairRequest, netuid: NetUid
     ) -> Response:

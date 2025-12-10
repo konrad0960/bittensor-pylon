@@ -1,21 +1,45 @@
 import re
-from enum import StrEnum
+from enum import Enum, unique
+from http import HTTPMethod
+from typing import NamedTuple
 
 from pylon._internal.common.apiver import ApiVersion
+from pylon._internal.common.types import IdentityName, NetUid
 
 
-class Endpoint(StrEnum):
-    CERTIFICATES = "/certificates"
-    CERTIFICATES_SELF = "/certificates/self"
-    CERTIFICATES_HOTKEY = "/certificates/{hotkey:str}"
-    NEURONS = "/neurons/{block_number:int}"
-    LATEST_NEURONS = "/neurons/latest"
-    SUBNET_WEIGHTS = "/weights"
+class EndpointMember(NamedTuple):
+    method: HTTPMethod
+    url: str
+    reverse: str
 
-    def format(self, *args, **kwargs) -> str:
-        normalized = re.sub(r":.+?}", "}", self)
+
+@unique
+class Endpoint(EndpointMember, Enum):
+    """
+    Endpoint path definitions for the API.
+
+    IMPORTANT: Each route handler must have its own unique enum member.
+    Even if multiple handlers share the same path (e.g., different HTTP methods),
+    they must have separate enum members to ensure unique reverse names in Litestar.
+    """
+
+    CERTIFICATES = (HTTPMethod.GET, "/certificates", "certificates")
+    CERTIFICATES_SELF = (HTTPMethod.GET, "/certificates/self", "certificates_self")
+    CERTIFICATES_GENERATE = (HTTPMethod.POST, "/certificates/self", "certificates_generate")
+    CERTIFICATES_HOTKEY = (HTTPMethod.GET, "/certificates/{hotkey:str}", "certificates_hotkey")
+    NEURONS = (HTTPMethod.GET, "/neurons/{block_number:int}", "neurons")
+    LATEST_NEURONS = (HTTPMethod.GET, "/neurons/latest", "latest_neurons")
+    SUBNET_WEIGHTS = (HTTPMethod.PUT, "/weights", "subnet_weights")
+    IDENTITY_LOGIN = (HTTPMethod.POST, "/login/identity/{identity_name:str}", "identity_login")
+
+    def format_url(self, *args, **kwargs) -> str:
+        normalized = re.sub(r":.+?}", "}", self.url)
         return normalized.format(*args, **kwargs)
 
-    def for_version(self, version: ApiVersion, *args, **kwargs):
-        formatted = self.format(*args, **kwargs)
-        return f"{version.prefix}{formatted}"
+    def absolute_url(
+        self, version: ApiVersion, netuid_: NetUid | None = None, identity_name_: IdentityName | None = None, **kwargs
+    ):
+        formatted_endpoint = self.format_url(**kwargs)
+        netuid_part = f"/subnet/{netuid_}" if netuid_ is not None else ""
+        identity_part = f"/identity/{identity_name_}" if identity_name_ is not None else ""
+        return f"{version.prefix}{identity_part}{netuid_part}{formatted_endpoint}"
