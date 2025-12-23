@@ -149,9 +149,7 @@ class TestErrorDetailExtraction:
         """
         Test that non-JSON response body results in None detail.
         """
-        service_mock.get(neurons_url).mock(
-            return_value=Response(status_code=codes.NOT_FOUND, content=b"Not Found")
-        )
+        service_mock.get(neurons_url).mock(return_value=Response(status_code=codes.NOT_FOUND, content=b"Not Found"))
 
         with sync_open_access_client:
             with pytest.raises(PylonNotFound) as exc_info:

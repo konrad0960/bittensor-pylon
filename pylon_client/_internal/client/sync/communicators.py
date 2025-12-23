@@ -264,9 +264,7 @@ class HttpCommunicator(AbstractCommunicator[Request, Response]):
             raise PylonForbidden(detail=detail) from exc
         if status_code == 404:
             raise PylonNotFound(detail=detail) from exc
-        raise PylonResponseException(
-            "Invalid response from Pylon API", status_code=status_code, detail=detail
-        ) from exc
+        raise PylonResponseException("Invalid response from Pylon API", status_code=status_code, detail=detail) from exc
 
     @staticmethod
     def _extract_error_detail(response: Response) -> str | None:
