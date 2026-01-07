@@ -13,6 +13,8 @@ from collections.abc import Callable
 from contextlib import asynccontextmanager
 from typing import Any, TypeAlias
 
+from turbobt.substrate.pallets.chain import SignedBlock
+
 from pylon_client._internal.common.models import (
     Block,
     CertificateAlgorithm,
@@ -262,12 +264,19 @@ class MockBittensorClient(AbstractBittensorClient):
         self.calls["set_commitment"].append((netuid, data))
         return await self._execute_behavior("set_commitment", netuid, data)
 
-    async def get_extrinsic(self, block_number: BlockNumber, extrinsic_index: ExtrinsicIndex) -> Extrinsic | None:
+    async def get_signed_block(self, block: Block) -> SignedBlock | None:
+        """
+        Get the full signed block data.
+        """
+        self.calls["get_signed_block"].append((block,))
+        return await self._execute_behavior("get_signed_block", block)
+
+    async def get_extrinsic(self, block: Block, extrinsic_index: ExtrinsicIndex) -> Extrinsic | None:
         """
         Get a decoded extrinsic from a block.
         """
-        self.calls["get_extrinsic"].append((block_number, extrinsic_index))
-        return await self._execute_behavior("get_extrinsic", block_number, extrinsic_index)
+        self.calls["get_extrinsic"].append((block, extrinsic_index))
+        return await self._execute_behavior("get_extrinsic", block, extrinsic_index)
 
     async def reset_call_tracking(self) -> None:
         """

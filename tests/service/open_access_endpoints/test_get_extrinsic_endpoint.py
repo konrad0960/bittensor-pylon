@@ -6,8 +6,8 @@ import pytest
 from litestar.status_codes import HTTP_200_OK, HTTP_404_NOT_FOUND
 from litestar.testing import AsyncTestClient
 
-from pylon_client._internal.common.models import Extrinsic, ExtrinsicCall
-from pylon_client._internal.common.types import BlockNumber, ExtrinsicIndex
+from pylon_client._internal.common.models import Block, Extrinsic, ExtrinsicCall
+from pylon_client._internal.common.types import BlockHash, BlockNumber, ExtrinsicHash, ExtrinsicIndex, ExtrinsicLength
 from tests.mock_bittensor_client import MockBittensorClient
 
 
@@ -19,8 +19,8 @@ def sample_extrinsic() -> Extrinsic:
     return Extrinsic(
         block_number=BlockNumber(1000),
         extrinsic_index=ExtrinsicIndex(0),
-        extrinsic_hash="0xabc123",
-        extrinsic_length=100,
+        extrinsic_hash=ExtrinsicHash("0xabc123"),
+        extrinsic_length=ExtrinsicLength(100),
         address="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
         call=ExtrinsicCall(
             call_module="Balances",
@@ -41,8 +41,8 @@ def timestamp_extrinsic() -> Extrinsic:
     return Extrinsic(
         block_number=BlockNumber(1),
         extrinsic_index=ExtrinsicIndex(0),
-        extrinsic_hash="0xf28cf21731dbe93b0fbb607334be06ec456f02c102084e08f19cc4d65b9b8434",
-        extrinsic_length=10,
+        extrinsic_hash=ExtrinsicHash("0xf28cf21731dbe93b0fbb607334be06ec456f02c102084e08f19cc4d65b9b8434"),
+        extrinsic_length=ExtrinsicLength(10),
         address=None,
         call=ExtrinsicCall(
             call_module="Timestamp",
@@ -61,7 +61,9 @@ async def test_get_extrinsic_success(
     """
     Test getting an extrinsic successfully.
     """
+    block = Block(number=BlockNumber(1000), hash=BlockHash("0xblock1000"))
     async with open_access_mock_bt_client.mock_behavior(
+        get_block=[block],
         get_extrinsic=[sample_extrinsic],
     ):
         response = await test_client.get("/api/v1/block/1000/extrinsic/0")
@@ -69,9 +71,8 @@ async def test_get_extrinsic_success(
         assert response.status_code == HTTP_200_OK, response.content
         assert response.json() == sample_extrinsic.model_dump(mode="json")
 
-    assert open_access_mock_bt_client.calls["get_extrinsic"] == [
-        (BlockNumber(1000), ExtrinsicIndex(0)),
-    ]
+    assert open_access_mock_bt_client.calls["get_block"] == [(BlockNumber(1000),)]
+    assert open_access_mock_bt_client.calls["get_extrinsic"] == [(block, ExtrinsicIndex(0))]
 
 
 @pytest.mark.asyncio
@@ -83,15 +84,15 @@ async def test_get_extrinsic_unsigned_extrinsic(
     """
     Test getting an unsigned extrinsic (address is None).
     """
+    block = Block(number=BlockNumber(1), hash=BlockHash("0xblock1"))
     async with open_access_mock_bt_client.mock_behavior(
+        get_block=[block],
         get_extrinsic=[timestamp_extrinsic],
     ):
         response = await test_client.get("/api/v1/block/1/extrinsic/0")
 
         assert response.status_code == HTTP_200_OK, response.content
-        response_data = response.json()
-        assert response_data["address"] is None
-        assert response_data["call"]["call_module"] == "Timestamp"
+        assert response.json() == timestamp_extrinsic.model_dump(mode="json")
 
 
 @pytest.mark.asyncio
@@ -102,7 +103,9 @@ async def test_get_extrinsic_not_found(
     """
     Test that non-existent extrinsic returns 404.
     """
+    block = Block(number=BlockNumber(999), hash=BlockHash("0xblock999"))
     async with open_access_mock_bt_client.mock_behavior(
+        get_block=[block],
         get_extrinsic=[None],
     ):
         response = await test_client.get("/api/v1/block/999/extrinsic/99")
@@ -123,14 +126,14 @@ async def test_get_extrinsic_block_not_found(
     Test that non-existent block returns 404.
     """
     async with open_access_mock_bt_client.mock_behavior(
-        get_extrinsic=[None],
+        get_block=[None],
     ):
         response = await test_client.get("/api/v1/block/999999999/extrinsic/0")
 
         assert response.status_code == HTTP_404_NOT_FOUND, response.content
         assert response.json() == {
             "status_code": HTTP_404_NOT_FOUND,
-            "detail": "Extrinsic 999999999-0 not found.",
+            "detail": "Block 999999999 not found.",
         }
 
 
@@ -192,33 +195,33 @@ async def test_get_extrinsic_different_indices(
     """
     Test getting different extrinsics from the same block.
     """
+    block = Block(number=BlockNumber(100), hash=BlockHash("0xblock100"))
     extrinsic_0 = Extrinsic(
         block_number=BlockNumber(100),
         extrinsic_index=ExtrinsicIndex(0),
-        extrinsic_hash="0xhash0",
-        extrinsic_length=10,
+        extrinsic_hash=ExtrinsicHash("0xhash0"),
+        extrinsic_length=ExtrinsicLength(10),
         address=None,
         call=ExtrinsicCall(call_module="Timestamp", call_function="set", call_args=[]),
     )
     extrinsic_1 = Extrinsic(
         block_number=BlockNumber(100),
         extrinsic_index=ExtrinsicIndex(1),
-        extrinsic_hash="0xhash1",
-        extrinsic_length=200,
+        extrinsic_hash=ExtrinsicHash("0xhash1"),
+        extrinsic_length=ExtrinsicLength(200),
         address="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
         call=ExtrinsicCall(call_module="Balances", call_function="transfer", call_args=[]),
     )
 
     async with open_access_mock_bt_client.mock_behavior(
+        get_block=[block, block],
         get_extrinsic=[extrinsic_0, extrinsic_1],
     ):
         response_0 = await test_client.get("/api/v1/block/100/extrinsic/0")
         response_1 = await test_client.get("/api/v1/block/100/extrinsic/1")
 
         assert response_0.status_code == HTTP_200_OK
-        assert response_0.json()["extrinsic_index"] == 0
-        assert response_0.json()["call"]["call_module"] == "Timestamp"
+        assert response_0.json() == extrinsic_0.model_dump(mode="json")
 
         assert response_1.status_code == HTTP_200_OK
-        assert response_1.json()["extrinsic_index"] == 1
-        assert response_1.json()["call"]["call_module"] == "Balances"
+        assert response_1.json() == extrinsic_1.model_dump(mode="json")

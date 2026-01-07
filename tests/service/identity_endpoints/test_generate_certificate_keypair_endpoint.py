@@ -66,8 +66,11 @@ async def test_generate_certificate_keypair_identity_default_algorithm(
         )
 
         assert response.status_code == HTTP_201_CREATED
-        response_data = response.json()
-        assert response_data["algorithm"] == 1
+        assert response.json() == {
+            "algorithm": 1,
+            "public_key": "0xpublic_default",
+            "private_key": "0xprivate_default",
+        }
 
 
 @pytest.mark.asyncio

@@ -16,7 +16,9 @@ from pylon_client._internal.common.types import (
     Dividends,
     Emission,
     EmissionRao,
+    ExtrinsicHash,
     ExtrinsicIndex,
+    ExtrinsicLength,
     Hotkey,
     Incentive,
     MaxWeightsLimit,
@@ -208,8 +210,8 @@ class Extrinsic(BittensorModel):
     extrinsic_index: ExtrinsicIndex
 
     # Common extrinsic fields
-    extrinsic_hash: str
-    extrinsic_length: int
+    extrinsic_hash: ExtrinsicHash
+    extrinsic_length: ExtrinsicLength
 
     # Signer address (None for unsigned extrinsics like timestamp.set)
     address: str | None = None

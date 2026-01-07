@@ -66,7 +66,10 @@ async def get_extrinsic_endpoint(
     Raises:
         NotFoundException: If block or extrinsic could not be found.
     """
-    extrinsic = await bt_client.get_extrinsic(block_number, extrinsic_index)
+    block = await bt_client.get_block(block_number)
+    if block is None:
+        raise NotFoundException(detail=f"Block {block_number} not found.")
+    extrinsic = await bt_client.get_extrinsic(block, extrinsic_index)
     if extrinsic is None:
         raise NotFoundException(detail=f"Extrinsic {block_number}-{extrinsic_index} not found.")
     return extrinsic
