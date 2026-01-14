@@ -12,7 +12,8 @@ dependencies = [
     "pydantic",
     "tenacity",
     "httpx",
-    "docker"
+    "docker",
+    "apscheduler",
 ]
 
 [project.optional-dependencies]
@@ -88,6 +89,8 @@ extend-immutable-calls = [
     "pylon_client._internal.common.types.Trust",
     "pylon_client._internal.common.types.ValidatorTrust",
     "pylon_client._internal.common.types.Weight",
+    "pylon_client.service.bittensor.recent.types.SoftLimit",
+    "pylon_client.service.bittensor.recent.types.HardLimit",
 ]
 
 [build-system]

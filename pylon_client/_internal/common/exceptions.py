@@ -69,3 +69,7 @@ class PylonMisconfigured(BasePylonException):
     """
     Error raised when client configuration is invalid or incomplete.
     """
+
+
+class PylonCacheException(BasePylonException):
+    """Base class for all Pylon cache exception."""

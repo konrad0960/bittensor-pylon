@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from litestar import Litestar
 
 from pylon_client.service.bittensor.pool import BittensorClientPool
+from pylon_client.service.scheduler import create_scheduler
 from pylon_client.service.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -24,3 +25,16 @@ async def bittensor_client_pool(app: Litestar) -> AsyncGenerator[None, None]:
     ) as pool:
         app.state.bittensor_client_pool = pool
         yield
+
+
+@asynccontextmanager
+async def scheduler_lifespan(app: Litestar) -> AsyncGenerator[None, None]:
+    """
+    Lifespan for APScheduler's scheduler.
+    """
+    scheduler = create_scheduler(app)
+    scheduler.start()
+    try:
+        yield
+    finally:
+        scheduler.shutdown()

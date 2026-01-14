@@ -11,7 +11,11 @@ from pylon_client._internal.common.requests import (
     GetCommitmentsRequest,
     GetExtrinsicRequest,
     GetLatestNeuronsRequest,
+    GetLatestValidatorsRequest,
     GetNeuronsRequest,
+    GetOwnCommitmentRequest,
+    GetRecentNeuronsRequest,
+    GetValidatorsRequest,
     IdentityLoginRequest,
     PylonRequest,
     SetCommitmentRequest,
@@ -22,6 +26,7 @@ from pylon_client._internal.common.responses import (
     GetCommitmentsResponse,
     GetExtrinsicResponse,
     GetNeuronsResponse,
+    GetValidatorsResponse,
     IdentityLoginResponse,
     LoginResponse,
     OpenAccessLoginResponse,
@@ -148,6 +153,29 @@ class AbstractOpenAccessApi(AbstractApi[LoginResponseT], ABC):
         """
         return self._send_authenticated_request(partial(self._get_latest_neurons_request, netuid))
 
+    def get_recent_neurons(self, netuid: NetUid) -> GetNeuronsResponse:
+        """
+        Retrieves recent neurons for a specific subnet.
+
+        This method returns neurons from the Pylon service's cache, which might be behind
+        the latest block. But it guarantees to provide data no older than configured
+        `PYLON_RECENT_OBJECTS_HARD_LIMIT_BLOCKS` blocks with a fast response time.
+
+        Args:
+            netuid: The unique identifier of the subnet.
+
+        Returns:
+            GetNeuronsResponse: containing cached neuron information and a dictionary mapping hotkeys to
+            Neuron objects.
+
+        Raises:
+            PylonResponseException:
+                - The Pylon service cache doesn't have fresh enough data.
+                - The requested subnet is not of one of the configured identities or is not configured
+                  for caching recent data via `PYLON_RECENT_OBJECTS_NETUIDS` config variable.
+        """
+        return self._send_authenticated_request(partial(self._get_recent_neurons_request, netuid))
+
     def get_commitments(self, netuid: NetUid) -> GetCommitmentsResponse:
         """
         Retrieves all commitments for a specific subnet at the latest available block.
@@ -173,6 +201,35 @@ class AbstractOpenAccessApi(AbstractApi[LoginResponseT], ABC):
         """
         return self._send_authenticated_request(partial(self._get_commitment_request, netuid, hotkey))
 
+    def get_validators(self, netuid: NetUid, block_number: BlockNumber) -> GetValidatorsResponse:
+        """
+        Retrieves validators for a specific subnet at a given block number.
+
+        Validators are neurons with validator_permit=True, sorted by total stake in descending order.
+
+        Args:
+            netuid: The unique identifier of the subnet.
+            block_number: The blockchain block number to query validators at.
+
+        Returns:
+            GetValidatorsResponse: containing the block information and a list of validator Neuron objects.
+        """
+        return self._send_authenticated_request(partial(self._get_validators_request, netuid, block_number))
+
+    def get_latest_validators(self, netuid: NetUid) -> GetValidatorsResponse:
+        """
+        Retrieves validators for a specific subnet at the latest available block.
+
+        Validators are neurons with validator_permit=True, sorted by total stake in descending order.
+
+        Args:
+            netuid: The unique identifier of the subnet.
+
+        Returns:
+            GetValidatorsResponse: containing the latest block information and a list of validator Neuron objects.
+        """
+        return self._send_authenticated_request(partial(self._get_latest_validators_request, netuid))
+
     def get_extrinsic(self, block_number: BlockNumber, extrinsic_index: ExtrinsicIndex) -> GetExtrinsicResponse:
         """
         Retrieves a decoded extrinsic from a specific block.
@@ -195,6 +252,15 @@ class AbstractOpenAccessApi(AbstractApi[LoginResponseT], ABC):
 
     @abstractmethod
     def _get_latest_neurons_request(self, netuid: NetUid) -> GetLatestNeuronsRequest: ...
+
+    @abstractmethod
+    def _get_recent_neurons_request(self, netuid: NetUid) -> GetRecentNeuronsRequest: ...
+
+    @abstractmethod
+    def _get_validators_request(self, netuid: NetUid, block_number: BlockNumber) -> GetValidatorsRequest: ...
+
+    @abstractmethod
+    def _get_latest_validators_request(self, netuid: NetUid) -> GetLatestValidatorsRequest: ...
 
     @abstractmethod
     def _get_commitments_request(self, netuid: NetUid) -> GetCommitmentsRequest: ...
@@ -251,6 +317,23 @@ class AbstractIdentityApi(AbstractApi[LoginResponseT], ABC):
         """
         return self._send_authenticated_request(self._get_latest_neurons_request)
 
+    def get_recent_neurons(self) -> GetNeuronsResponse:
+        """
+        Retrieves recent neurons for the authenticated identity's subnet.
+
+        This method returns neurons from the Pylon service's cache, which might be behind
+        the latest block. But it guarantees to provide data no older than configured
+        `PYLON_RECENT_OBJECTS_HARD_LIMIT_BLOCKS` blocks with a fast response time.
+
+        Returns:
+            GetNeuronsResponse: containing cached neuron information and a dictionary mapping hotkeys to
+            Neuron objects.
+
+        Raises:
+            PylonResponseException: When the Pylon service cache doesn't have fresh enough data.
+        """
+        return self._send_authenticated_request(self._get_recent_neurons_request)
+
     def put_weights(self, weights: dict[Hotkey, Weight]) -> SetWeightsResponse:
         """
         Submits weights for neurons in the authenticated identity's subnet.
@@ -289,6 +372,15 @@ class AbstractIdentityApi(AbstractApi[LoginResponseT], ABC):
         """
         return self._send_authenticated_request(partial(self._get_commitment_request, hotkey))
 
+    def get_own_commitment(self) -> GetCommitmentResponse:
+        """
+        Retrieves the commitment for the authenticated identity's own wallet hotkey.
+
+        Returns:
+            GetCommitmentResponse: containing the hotkey and its commitment data.
+        """
+        return self._send_authenticated_request(self._get_own_commitment_request)
+
     def set_commitment(self, commitment: CommitmentDataBytes | CommitmentDataHex) -> SetCommitmentResponse:
         """
         Sets a commitment (model metadata) on-chain for the authenticated identity's wallet hotkey.
@@ -303,6 +395,31 @@ class AbstractIdentityApi(AbstractApi[LoginResponseT], ABC):
             SetCommitmentResponse indicating the commitment has been set successfully.
         """
         return self._send_authenticated_request(partial(self._set_commitment_request, commitment))
+
+    def get_validators(self, block_number: BlockNumber) -> GetValidatorsResponse:
+        """
+        Retrieves validators for the authenticated identity's subnet at a given block number.
+
+        Validators are neurons with validator_permit=True, sorted by total stake in descending order.
+
+        Args:
+            block_number: The blockchain block number to query validators at.
+
+        Returns:
+            GetValidatorsResponse: containing the block information and a list of validator Neuron objects.
+        """
+        return self._send_authenticated_request(partial(self._get_validators_request, block_number))
+
+    def get_latest_validators(self) -> GetValidatorsResponse:
+        """
+        Retrieves validators for the authenticated identity's subnet at the latest available block.
+
+        Validators are neurons with validator_permit=True, sorted by total stake in descending order.
+
+        Returns:
+            GetValidatorsResponse: containing the latest block information and a list of validator Neuron objects.
+        """
+        return self._send_authenticated_request(self._get_latest_validators_request)
 
     def get_extrinsic(self, block_number: BlockNumber, extrinsic_index: ExtrinsicIndex) -> GetExtrinsicResponse:
         """
@@ -328,6 +445,9 @@ class AbstractIdentityApi(AbstractApi[LoginResponseT], ABC):
     def _get_latest_neurons_request(self) -> GetLatestNeuronsRequest: ...
 
     @abstractmethod
+    def _get_recent_neurons_request(self) -> GetRecentNeuronsRequest: ...
+
+    @abstractmethod
     def _put_weights_request(self, weights: dict[Hotkey, Weight]) -> SetWeightsRequest: ...
 
     @abstractmethod
@@ -337,7 +457,16 @@ class AbstractIdentityApi(AbstractApi[LoginResponseT], ABC):
     def _get_commitment_request(self, hotkey: Hotkey) -> GetCommitmentRequest: ...
 
     @abstractmethod
+    def _get_own_commitment_request(self) -> GetOwnCommitmentRequest: ...
+
+    @abstractmethod
     def _set_commitment_request(self, commitment: CommitmentDataBytes | CommitmentDataHex) -> SetCommitmentRequest: ...
+
+    @abstractmethod
+    def _get_validators_request(self, block_number: BlockNumber) -> GetValidatorsRequest: ...
+
+    @abstractmethod
+    def _get_latest_validators_request(self) -> GetLatestValidatorsRequest: ...
 
     @abstractmethod
     def _get_extrinsic_request(
@@ -360,11 +489,20 @@ class OpenAccessApi(AbstractOpenAccessApi[OpenAccessLoginResponse]):
     def _get_latest_neurons_request(self, netuid: NetUid) -> GetLatestNeuronsRequest:
         return GetLatestNeuronsRequest(netuid=netuid)
 
+    def _get_recent_neurons_request(self, netuid: NetUid) -> GetRecentNeuronsRequest:
+        return GetRecentNeuronsRequest(netuid=netuid)
+
     def _get_commitments_request(self, netuid: NetUid) -> GetCommitmentsRequest:
         return GetCommitmentsRequest(netuid=netuid)
 
     def _get_commitment_request(self, netuid: NetUid, hotkey: Hotkey) -> GetCommitmentRequest:
         return GetCommitmentRequest(netuid=netuid, hotkey=hotkey)
+
+    def _get_validators_request(self, netuid: NetUid, block_number: BlockNumber) -> GetValidatorsRequest:
+        return GetValidatorsRequest(netuid=netuid, block_number=block_number)
+
+    def _get_latest_validators_request(self, netuid: NetUid) -> GetLatestValidatorsRequest:
+        return GetLatestValidatorsRequest(netuid=netuid)
 
     def _get_extrinsic_request(self, block_number: BlockNumber, extrinsic_index: ExtrinsicIndex) -> GetExtrinsicRequest:
         return GetExtrinsicRequest(block_number=block_number, extrinsic_index=extrinsic_index)
@@ -395,6 +533,13 @@ class IdentityApi(AbstractIdentityApi[IdentityLoginResponse]):
             identity_name=self._login_response.identity_name,
         )
 
+    def _get_recent_neurons_request(self) -> GetRecentNeuronsRequest:
+        assert self._login_response, "Attempted api request without authentication."
+        return GetRecentNeuronsRequest(
+            netuid=self._login_response.netuid,
+            identity_name=self._login_response.identity_name,
+        )
+
     def _put_weights_request(self, weights: dict[Hotkey, Weight]) -> SetWeightsRequest:
         assert self._login_response, "Attempted api request without authentication."
         return SetWeightsRequest(
@@ -418,12 +563,34 @@ class IdentityApi(AbstractIdentityApi[IdentityLoginResponse]):
             hotkey=hotkey,
         )
 
+    def _get_own_commitment_request(self) -> GetOwnCommitmentRequest:
+        assert self._login_response, "Attempted api request without authentication."
+        return GetOwnCommitmentRequest(
+            netuid=self._login_response.netuid,
+            identity_name=self._login_response.identity_name,
+        )
+
     def _set_commitment_request(self, commitment: CommitmentDataBytes | CommitmentDataHex) -> SetCommitmentRequest:
         assert self._login_response, "Attempted api request without authentication."
         return SetCommitmentRequest(
             netuid=self._login_response.netuid,
             identity_name=self._login_response.identity_name,
             commitment=cast(CommitmentDataBytes, commitment),
+        )
+
+    def _get_validators_request(self, block_number: BlockNumber) -> GetValidatorsRequest:
+        assert self._login_response, "Attempted api request without authentication."
+        return GetValidatorsRequest(
+            netuid=self._login_response.netuid,
+            identity_name=self._login_response.identity_name,
+            block_number=block_number,
+        )
+
+    def _get_latest_validators_request(self) -> GetLatestValidatorsRequest:
+        assert self._login_response, "Attempted api request without authentication."
+        return GetLatestValidatorsRequest(
+            netuid=self._login_response.netuid,
+            identity_name=self._login_response.identity_name,
         )
 
     def _get_extrinsic_request(self, block_number: BlockNumber, extrinsic_index: ExtrinsicIndex) -> GetExtrinsicRequest:

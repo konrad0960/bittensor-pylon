@@ -21,7 +21,11 @@ from pylon_client._internal.common.requests import (
     GetCommitmentsRequest,
     GetExtrinsicRequest,
     GetLatestNeuronsRequest,
+    GetLatestValidatorsRequest,
     GetNeuronsRequest,
+    GetOwnCommitmentRequest,
+    GetRecentNeuronsRequest,
+    GetValidatorsRequest,
     IdentityLoginRequest,
     PylonRequest,
     SetCommitmentRequest,
@@ -201,6 +205,24 @@ class AsyncHttpCommunicator(AbstractAsyncCommunicator[Request, Response]):
         return self._raw_client.build_request(method=Endpoint.LATEST_NEURONS.method, url=url)
 
     @_translate_request.register
+    async def _(self, request: GetRecentNeuronsRequest) -> Request:
+        assert self._raw_client is not None
+        url = self._build_url(Endpoint.RECENT_NEURONS, request)
+        return self._raw_client.build_request(method=Endpoint.RECENT_NEURONS.method, url=url)
+
+    @_translate_request.register
+    async def _(self, request: GetValidatorsRequest) -> Request:
+        assert self._raw_client is not None
+        url = self._build_url(Endpoint.VALIDATORS, request)
+        return self._raw_client.build_request(method=Endpoint.VALIDATORS.method, url=url)
+
+    @_translate_request.register
+    async def _(self, request: GetLatestValidatorsRequest) -> Request:
+        assert self._raw_client is not None
+        url = self._build_url(Endpoint.LATEST_VALIDATORS, request)
+        return self._raw_client.build_request(method=Endpoint.LATEST_VALIDATORS.method, url=url)
+
+    @_translate_request.register
     async def _(self, request: IdentityLoginRequest) -> Request:
         assert self._raw_client is not None
         url = self._build_url(Endpoint.IDENTITY_LOGIN, request)
@@ -217,6 +239,12 @@ class AsyncHttpCommunicator(AbstractAsyncCommunicator[Request, Response]):
         assert self._raw_client is not None
         url = self._build_url(Endpoint.LATEST_COMMITMENTS_HOTKEY, request)
         return self._raw_client.build_request(method=Endpoint.LATEST_COMMITMENTS_HOTKEY.method, url=url)
+
+    @_translate_request.register
+    async def _(self, request: GetOwnCommitmentRequest) -> Request:
+        assert self._raw_client is not None
+        url = self._build_url(Endpoint.LATEST_COMMITMENTS_SELF, request)
+        return self._raw_client.build_request(method=Endpoint.LATEST_COMMITMENTS_SELF.method, url=url)
 
     @_translate_request.register
     async def _(self, request: SetCommitmentRequest) -> Request:

@@ -2,13 +2,16 @@
 Shared fixtures for service endpoint tests.
 """
 
+import pytest
 import pytest_asyncio
 from litestar.testing import AsyncTestClient
 
 from pylon_client._internal.common.types import IdentityName
 from pylon_client.service.bittensor.pool import BittensorClientPool
 from pylon_client.service.identities import identities
+from pylon_client.service.stores import StoreName
 from tests.mock_bittensor_client import MockBittensorClient
+from tests.mock_store import MockStore
 
 
 @pytest_asyncio.fixture(loop_scope="session")
@@ -41,8 +44,20 @@ async def sn2_mock_bt_client(mock_bt_client_pool):
         await client.reset_call_tracking()
 
 
+@pytest.fixture
+def mock_stores() -> dict[StoreName, MockStore]:
+    return {
+        StoreName.RECENT_OBJECTS: MockStore(),
+    }
+
+
+@pytest.fixture
+def mock_recent_objects_store(mock_stores) -> MockStore:
+    return mock_stores[StoreName.RECENT_OBJECTS]
+
+
 @pytest_asyncio.fixture(loop_scope="session")
-async def test_app(mock_bt_client_pool: MockBittensorClient, monkeypatch):
+async def test_app(mock_bt_client_pool: MockBittensorClient, monkeypatch, mock_stores):
     """
     Create a test Litestar app with the mock client pool.
     """
@@ -56,8 +71,15 @@ async def test_app(mock_bt_client_pool: MockBittensorClient, monkeypatch):
         app.state.bittensor_client_pool = mock_bt_client_pool
         yield
 
-    # Replace the lifespan in the main module
-    monkeypatch.setattr("pylon_client.service.main.bittensor_client_pool", mock_lifespan)
+    # Mock the scheduler lifespan to prevent background task execution during tests
+    @asynccontextmanager
+    async def mock_scheduler_lifespan(app):
+        yield
+
+    # Replace the lifespans
+    monkeypatch.setattr("pylon_client.service.lifespans.bittensor_client_pool", mock_lifespan)
+    monkeypatch.setattr("pylon_client.service.lifespans.scheduler_lifespan", mock_scheduler_lifespan)
+    monkeypatch.setattr("pylon_client.service.main.stores", mock_stores)
 
     app = create_app()
     app.debug = True  # Enable detailed error responses

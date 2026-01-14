@@ -7,6 +7,7 @@ from enum import StrEnum
 from typing import Any, Generic, TypeVar
 
 from bittensor_wallet import Wallet
+from turbobt.block import Block as TurboBtBlock
 from turbobt.client import Bittensor
 from turbobt.neuron import Neuron as TurboBtNeuron
 from turbobt.subnet import CertificateAlgorithm as TurboBtCertificateAlgorithm
@@ -42,6 +43,7 @@ from pylon_client._internal.common.models import (
     SubnetHyperparams,
     SubnetNeurons,
     SubnetState,
+    SubnetValidators,
 )
 from pylon_client._internal.common.types import (
     ArchiveBlocksCutoff,
@@ -132,6 +134,12 @@ class AbstractBittensorClient(ABC):
         """
 
     @abstractmethod
+    async def get_block_timestamp(self, block: Block) -> Timestamp:
+        """
+        Returns the timestamp of a block in seconds.
+        """
+
+    @abstractmethod
     async def get_neurons_list(self, netuid: NetUid, block: Block) -> list[Neuron]:
         """
         Fetches all neurons at the given block.
@@ -191,9 +199,10 @@ class AbstractBittensorClient(ABC):
         """
 
     @abstractmethod
-    async def get_commitment(self, netuid: NetUid, block: Block, hotkey: Hotkey) -> Commitment | None:
+    async def get_commitment(self, netuid: NetUid, block: Block, hotkey: Hotkey | None = None) -> Commitment | None:
         """
-        Fetches commitment data for a hotkey in a subnet.
+        Fetches commitment data for a hotkey in a subnet. If no hotkey is provided, the hotkey of the client's wallet
+        is used.
         """
 
     @abstractmethod
@@ -206,6 +215,13 @@ class AbstractBittensorClient(ABC):
     async def set_commitment(self, netuid: NetUid, data: CommitmentDataBytes) -> None:
         """
         Sets commitment data on chain for the wallet's hotkey.
+        """
+
+    @abstractmethod
+    async def get_validators(self, netuid: NetUid, block: Block) -> SubnetValidators:
+        """
+        Fetches validators (neurons with validator_permit=True) at the given block,
+        sorted by total stake in descending order.
         """
 
     @abstractmethod
@@ -256,6 +272,13 @@ class TurboBtClient(AbstractBittensorClient):
         await self._raw_client.__aexit__(None, None, None)
         self._raw_client = None
 
+    def _resolve_hotkey(self, hotkey: Hotkey | None) -> Hotkey:
+        if hotkey:
+            return hotkey
+        if self.wallet is None:
+            raise ValueError("No hotkey provided while the client has no wallet.")
+        return Hotkey(self.wallet.hotkey.ss58_address)
+
     @track_operation(
         bittensor_operation_duration,
         labels={
@@ -288,6 +311,14 @@ class TurboBtClient(AbstractBittensorClient):
         block = await self.get_block(BlockNumber(LATEST_BLOCK_MARK))
         assert block is not None, "Latest block should always exist"
         return block
+
+    async def get_block_timestamp(self, block: Block) -> Timestamp:
+        assert self._raw_client is not None, (
+            "The client is not open, please use the client as a context manager or call the open() method."
+        )
+        turbobt_block: TurboBtBlock = await self._raw_client.block(block.number).get()
+        timestamp = await turbobt_block.get_timestamp()
+        return Timestamp(int(timestamp.timestamp()))
 
     @staticmethod
     async def _translate_neuron(neuron: TurboBtNeuron, stakes: Stakes) -> Neuron:
@@ -415,10 +446,7 @@ class TurboBtClient(AbstractBittensorClient):
         assert self._raw_client is not None, (
             "The client is not open, please use the client as a context manager or call the open() method."
         )
-        if not hotkey:
-            if self.wallet is None:
-                raise ValueError("No hotkey provided while the client has no wallet.")
-            hotkey = Hotkey(self.wallet.hotkey.ss58_address)
+        hotkey = self._resolve_hotkey(hotkey)
         logger.debug(
             f"Fetching certificate of {hotkey} hotkey from subnet {netuid} at block {block.number}, {self.uri}"
         )
@@ -528,16 +556,33 @@ class TurboBtClient(AbstractBittensorClient):
         logger.debug(f"Setting weights on subnet {netuid} at {self.uri}")
         await self._raw_client.subnet(netuid).weights.set(await self._translate_weights(netuid, weights))
 
-    async def get_commitment(self, netuid: NetUid, block: Block, hotkey: Hotkey) -> Commitment | None:
+    @track_operation(
+        bittensor_operation_duration,
+        labels={
+            "uri": Attr("uri"),
+            "netuid": Param("netuid"),
+            "hotkey": Attr("hotkey"),
+        },
+    )
+    async def get_commitment(self, netuid: NetUid, block: Block, hotkey: Hotkey | None = None) -> Commitment | None:
         assert self._raw_client is not None, (
             "The client is not open, please use the client as a context manager or call the open() method."
         )
+        hotkey = self._resolve_hotkey(hotkey)
         logger.debug(f"Fetching commitment for {hotkey} from subnet {netuid} at block {block.number}, {self.uri}")
         commitment = await self._raw_client.subnet(netuid).commitments.get(hotkey, block_hash=block.hash)
         if commitment is None:
             return None
-        return Commitment(block=block, hotkey=Hotkey(hotkey), commitment=CommitmentDataBytes(commitment).hex())
+        return Commitment(block=block, hotkey=hotkey, commitment=CommitmentDataBytes(commitment).hex())
 
+    @track_operation(
+        bittensor_operation_duration,
+        labels={
+            "uri": Attr("uri"),
+            "netuid": Param("netuid"),
+            "hotkey": Attr("hotkey"),
+        },
+    )
     async def get_commitments(self, netuid: NetUid, block: Block) -> SubnetCommitments:
         assert self._raw_client is not None, (
             "The client is not open, please use the client as a context manager or call the open() method."
@@ -549,6 +594,14 @@ class TurboBtClient(AbstractBittensorClient):
             commitments={Hotkey(hotkey): CommitmentDataBytes(data).hex() for hotkey, data in commitments.items()},
         )
 
+    @track_operation(
+        bittensor_operation_duration,
+        labels={
+            "uri": Attr("uri"),
+            "netuid": Param("netuid"),
+            "hotkey": Attr("hotkey"),
+        },
+    )
     async def set_commitment(self, netuid: NetUid, data: CommitmentDataBytes) -> None:
         assert self._raw_client is not None, (
             "The client is not open, please use the client as a context manager or call the open() method."
@@ -557,6 +610,21 @@ class TurboBtClient(AbstractBittensorClient):
         # Convert to plain bytes because scalecodec uses `type(value) is bytes` check
         # which fails for bytes subclasses like CommitmentDataBytes
         await self._raw_client.subnet(netuid).commitments.set(bytes(data))
+
+    @track_operation(
+        bittensor_operation_duration,
+        labels={
+            "uri": Attr("uri"),
+            "netuid": Param("netuid"),
+            "hotkey": Attr("hotkey"),
+        },
+    )
+    async def get_validators(self, netuid: NetUid, block: Block) -> SubnetValidators:
+        logger.debug(f"Fetching validators from subnet {netuid} at block {block.number}, {self.uri}")
+        subnet_neurons = await self.get_neurons(netuid, block=block)
+        validators = [n for n in subnet_neurons.neurons.values() if n.validator_permit]
+        validators.sort(key=lambda n: n.stakes.total, reverse=True)
+        return SubnetValidators(block=block, validators=validators)
 
     async def get_signed_block(self, block: Block) -> SignedBlock | None:
         assert self._raw_client is not None, (
@@ -689,7 +757,10 @@ class BittensorClient(Generic[SubClient], AbstractBittensorClient):
     async def get_subnet_state(self, netuid: NetUid, block: Block) -> SubnetState:
         return await self._delegate(self.subclient_cls.get_subnet_state, netuid=netuid, block=block)
 
-    async def get_commitment(self, netuid: NetUid, block: Block, hotkey: Hotkey) -> Commitment | None:
+    async def get_block_timestamp(self, block: Block) -> Timestamp:
+        return await self._delegate(self.subclient_cls.get_block_timestamp, block=block)
+
+    async def get_commitment(self, netuid: NetUid, block: Block, hotkey: Hotkey | None = None) -> Commitment | None:
         return await self._delegate(self.subclient_cls.get_commitment, netuid=netuid, block=block, hotkey=hotkey)
 
     async def get_commitments(self, netuid: NetUid, block: Block) -> SubnetCommitments:
@@ -697,6 +768,9 @@ class BittensorClient(Generic[SubClient], AbstractBittensorClient):
 
     async def set_commitment(self, netuid: NetUid, data: CommitmentDataBytes) -> None:
         return await self._delegate(self.subclient_cls.set_commitment, netuid=netuid, data=data)
+
+    async def get_validators(self, netuid: NetUid, block: Block) -> SubnetValidators:
+        return await self._delegate(self.subclient_cls.get_validators, netuid=netuid, block=block)
 
     async def get_signed_block(self, block: Block) -> SignedBlock | None:
         return await self._delegate(self.subclient_cls.get_signed_block, block=block)
