@@ -15,10 +15,10 @@ class PylonRequestException(BasePylonException):
 
 class PylonResponseException(BasePylonException):
     """
-    Error that pylon client issues on receiving an error response from Pylon.
+    Error raised when Pylon returns an error response (4xx/5xx status code).
     """
 
-    default_message: ClassVar[str] = "Request failed"
+    default_message: ClassVar[str] = "Pylon returned an error"
     default_status_code: ClassVar[int | None] = None
 
     def __init__(self, message: str | None = None, status_code: int | None = None, detail: str | None = None):
