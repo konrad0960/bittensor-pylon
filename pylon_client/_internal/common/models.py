@@ -1,7 +1,8 @@
 from enum import IntEnum, StrEnum
 from ipaddress import IPv4Address, IPv6Address
+from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from pylon_client._internal.common.currency import Currency, Token
 from pylon_client._internal.common.types import (
@@ -15,6 +16,9 @@ from pylon_client._internal.common.types import (
     Dividends,
     Emission,
     EmissionRao,
+    ExtrinsicHash,
+    ExtrinsicIndex,
+    ExtrinsicLength,
     Hotkey,
     Incentive,
     MaxWeightsLimit,
@@ -185,3 +189,41 @@ class Commitment(BittensorModel):
 class SubnetCommitments(BittensorModel):
     block: Block
     commitments: dict[Hotkey, CommitmentDataHex]
+
+
+class ExtrinsicCall(BittensorModel):
+    """
+    Represents the call data within an extrinsic.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    call_module: str
+    call_function: str
+    call_args: list[dict[str, Any]]
+
+
+class Extrinsic(BittensorModel):
+    """
+    Represents a decoded blockchain extrinsic.
+
+    This model captures the full decoded extrinsic data from the chain.
+    Common fields are typed, and any additional fields from the decoded
+    extrinsic are preserved via extra="allow".
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    # Block context
+    block_number: BlockNumber
+    extrinsic_index: ExtrinsicIndex
+
+    # Common extrinsic fields
+    extrinsic_hash: ExtrinsicHash
+    extrinsic_length: ExtrinsicLength
+
+    # Signer address (None for unsigned extrinsics like timestamp.set)
+    address: str | None = None
+
+    # Call information
+    call: ExtrinsicCall

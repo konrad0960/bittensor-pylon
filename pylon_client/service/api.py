@@ -9,6 +9,7 @@ from pylon_client._internal.common.bodies import LoginBody, SetCommitmentBody, S
 from pylon_client._internal.common.endpoints import Endpoint
 from pylon_client._internal.common.models import (
     Commitment,
+    Extrinsic,
     Hotkey,
     NeuronCertificate,
     SubnetCommitments,
@@ -19,7 +20,7 @@ from pylon_client._internal.common.requests import (
     GenerateCertificateKeypairRequest,
 )
 from pylon_client._internal.common.responses import IdentityLoginResponse
-from pylon_client._internal.common.types import BlockNumber, NetUid
+from pylon_client._internal.common.types import BlockNumber, ExtrinsicIndex, NetUid
 from pylon_client.service.bittensor.client import AbstractBittensorClient
 from pylon_client.service.bittensor.recent import RecentObjectMissing, RecentObjectProvider, RecentObjectStale
 from pylon_client.service.dependencies import (
@@ -56,6 +57,30 @@ def handler(endpoint: Endpoint, **kwargs):
 async def identity_login(data: LoginBody, identity: Identity) -> IdentityLoginResponse:
     # TODO: Add real authentication and session.
     return IdentityLoginResponse(netuid=identity.netuid, identity_name=identity.identity_name)
+
+
+@handler(
+    Endpoint.EXTRINSIC,
+    dependencies={"bt_client": Provide(bt_client_open_access_dep)},
+)
+async def get_extrinsic_endpoint(
+    bt_client: AbstractBittensorClient, block_number: BlockNumber, extrinsic_index: ExtrinsicIndex
+) -> Extrinsic:
+    """
+    Get a decoded extrinsic from a specific block.
+
+    This is a block-level endpoint that does not require subnet context.
+
+    Raises:
+        NotFoundException: If block or extrinsic could not be found.
+    """
+    block = await bt_client.get_block(block_number)
+    if block is None:
+        raise NotFoundException(detail=f"Block {block_number} not found.")
+    extrinsic = await bt_client.get_extrinsic(block, extrinsic_index)
+    if extrinsic is None:
+        raise NotFoundException(detail=f"Extrinsic {block_number}-{extrinsic_index} not found.")
+    return extrinsic
 
 
 class OpenAccessController(Controller):

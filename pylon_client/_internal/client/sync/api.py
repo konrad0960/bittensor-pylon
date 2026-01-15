@@ -9,6 +9,7 @@ from pylon_client._internal.common.exceptions import PylonClosed, PylonForbidden
 from pylon_client._internal.common.requests import (
     GetCommitmentRequest,
     GetCommitmentsRequest,
+    GetExtrinsicRequest,
     GetLatestNeuronsRequest,
     GetLatestValidatorsRequest,
     GetNeuronsRequest,
@@ -23,6 +24,7 @@ from pylon_client._internal.common.requests import (
 from pylon_client._internal.common.responses import (
     GetCommitmentResponse,
     GetCommitmentsResponse,
+    GetExtrinsicResponse,
     GetNeuronsResponse,
     GetValidatorsResponse,
     IdentityLoginResponse,
@@ -36,6 +38,7 @@ from pylon_client._internal.common.types import (
     BlockNumber,
     CommitmentDataBytes,
     CommitmentDataHex,
+    ExtrinsicIndex,
     Hotkey,
     NetUid,
     Weight,
@@ -227,6 +230,21 @@ class AbstractOpenAccessApi(AbstractApi[LoginResponseT], ABC):
         """
         return self._send_authenticated_request(partial(self._get_latest_validators_request, netuid))
 
+    def get_extrinsic(self, block_number: BlockNumber, extrinsic_index: ExtrinsicIndex) -> GetExtrinsicResponse:
+        """
+        Retrieves a decoded extrinsic from a specific block.
+
+        This is a block-level query that does not require subnet context.
+
+        Args:
+            block_number: The blockchain block number to query.
+            extrinsic_index: The index of the extrinsic within the block.
+
+        Returns:
+            GetExtrinsicResponse: containing the full extrinsic data.
+        """
+        return self._send_authenticated_request(partial(self._get_extrinsic_request, block_number, extrinsic_index))
+
     # Private API
 
     @abstractmethod
@@ -249,6 +267,11 @@ class AbstractOpenAccessApi(AbstractApi[LoginResponseT], ABC):
 
     @abstractmethod
     def _get_commitment_request(self, netuid: NetUid, hotkey: Hotkey) -> GetCommitmentRequest: ...
+
+    @abstractmethod
+    def _get_extrinsic_request(
+        self, block_number: BlockNumber, extrinsic_index: ExtrinsicIndex
+    ) -> GetExtrinsicRequest: ...
 
 
 class AbstractIdentityApi(AbstractApi[LoginResponseT], ABC):
@@ -398,6 +421,21 @@ class AbstractIdentityApi(AbstractApi[LoginResponseT], ABC):
         """
         return self._send_authenticated_request(self._get_latest_validators_request)
 
+    def get_extrinsic(self, block_number: BlockNumber, extrinsic_index: ExtrinsicIndex) -> GetExtrinsicResponse:
+        """
+        Retrieves a decoded extrinsic from a specific block.
+
+        This is a block-level query that does not require subnet context.
+
+        Args:
+            block_number: The blockchain block number to query.
+            extrinsic_index: The index of the extrinsic within the block.
+
+        Returns:
+            GetExtrinsicResponse: containing the full extrinsic data.
+        """
+        return self._send_authenticated_request(partial(self._get_extrinsic_request, block_number, extrinsic_index))
+
     # Private API
 
     @abstractmethod
@@ -430,6 +468,11 @@ class AbstractIdentityApi(AbstractApi[LoginResponseT], ABC):
     @abstractmethod
     def _get_latest_validators_request(self) -> GetLatestValidatorsRequest: ...
 
+    @abstractmethod
+    def _get_extrinsic_request(
+        self, block_number: BlockNumber, extrinsic_index: ExtrinsicIndex
+    ) -> GetExtrinsicRequest: ...
+
 
 class OpenAccessApi(AbstractOpenAccessApi[OpenAccessLoginResponse]):
     def _login(self) -> OpenAccessLoginResponse:
@@ -460,6 +503,9 @@ class OpenAccessApi(AbstractOpenAccessApi[OpenAccessLoginResponse]):
 
     def _get_latest_validators_request(self, netuid: NetUid) -> GetLatestValidatorsRequest:
         return GetLatestValidatorsRequest(netuid=netuid)
+
+    def _get_extrinsic_request(self, block_number: BlockNumber, extrinsic_index: ExtrinsicIndex) -> GetExtrinsicRequest:
+        return GetExtrinsicRequest(block_number=block_number, extrinsic_index=extrinsic_index)
 
 
 class IdentityApi(AbstractIdentityApi[IdentityLoginResponse]):
@@ -546,3 +592,6 @@ class IdentityApi(AbstractIdentityApi[IdentityLoginResponse]):
             netuid=self._login_response.netuid,
             identity_name=self._login_response.identity_name,
         )
+
+    def _get_extrinsic_request(self, block_number: BlockNumber, extrinsic_index: ExtrinsicIndex) -> GetExtrinsicRequest:
+        return GetExtrinsicRequest(block_number=block_number, extrinsic_index=extrinsic_index)

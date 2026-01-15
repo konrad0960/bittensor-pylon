@@ -21,6 +21,8 @@ from turbobt.subnet import (
     SubnetHyperparams as TurboBtSubnetHyperparams,
 )
 from turbobt.substrate.exceptions import UnknownBlock
+from turbobt.substrate.pallets.chain import Extrinsic as TurboBtExtrinsic
+from turbobt.substrate.pallets.chain import SignedBlock
 
 from pylon_client._internal.common.constants import LATEST_BLOCK_MARK
 from pylon_client._internal.common.currency import Currency, Token
@@ -31,6 +33,8 @@ from pylon_client._internal.common.models import (
     CertificateAlgorithm,
     Commitment,
     CommitReveal,
+    Extrinsic,
+    ExtrinsicCall,
     Neuron,
     NeuronCertificate,
     NeuronCertificateKeypair,
@@ -51,6 +55,9 @@ from pylon_client._internal.common.types import (
     Consensus,
     Dividends,
     Emission,
+    ExtrinsicHash,
+    ExtrinsicIndex,
+    ExtrinsicLength,
     Hotkey,
     Incentive,
     NetUid,
@@ -215,6 +222,32 @@ class AbstractBittensorClient(ABC):
         """
         Fetches validators (neurons with validator_permit=True) at the given block,
         sorted by total stake in descending order.
+        """
+
+    @abstractmethod
+    async def get_signed_block(self, block: Block) -> SignedBlock | None:
+        """
+        Fetches the full signed block data from the chain.
+
+        Args:
+            block: The block to fetch.
+
+        Returns:
+            The raw signed block data containing header and extrinsics,
+            or None if the block could not be fetched.
+        """
+
+    @abstractmethod
+    async def get_extrinsic(self, block: Block, extrinsic_index: ExtrinsicIndex) -> Extrinsic | None:
+        """
+        Fetches a decoded extrinsic from a specific block.
+
+        Args:
+            block: The block containing the extrinsic.
+            extrinsic_index: The index of the extrinsic within the block.
+
+        Returns:
+            The decoded extrinsic if found, None if the index is out of bounds.
         """
 
 
@@ -593,6 +626,59 @@ class TurboBtClient(AbstractBittensorClient):
         validators.sort(key=lambda n: n.stakes.total, reverse=True)
         return SubnetValidators(block=block, validators=validators)
 
+    async def get_signed_block(self, block: Block) -> SignedBlock | None:
+        assert self._raw_client is not None, (
+            "The client is not open, please use the client as a context manager or call the open() method."
+        )
+        logger.debug(f"Fetching signed block {block.number} at {self.uri}")
+        return await self._raw_client.subtensor.chain.getBlock(block.hash)
+
+    async def get_extrinsic(self, block: Block, extrinsic_index: ExtrinsicIndex) -> Extrinsic | None:
+        assert self._raw_client is not None, (
+            "The client is not open, please use the client as a context manager or call the open() method."
+        )
+        logger.debug(f"Fetching extrinsic {extrinsic_index} from block {block.number} at {self.uri}")
+
+        signed_block = await self.get_signed_block(block)
+        if signed_block is None:
+            return None
+
+        extrinsics: list[TurboBtExtrinsic] = signed_block["block"]["extrinsics"]  # type: ignore[assignment]
+        if extrinsic_index >= len(extrinsics):
+            return None
+
+        raw_extrinsic = extrinsics[extrinsic_index]
+        return self._translate_extrinsic(raw_extrinsic, block.number, extrinsic_index)
+
+    @staticmethod
+    def _translate_extrinsic(
+        raw_extrinsic: TurboBtExtrinsic, block_number: BlockNumber, extrinsic_index: ExtrinsicIndex
+    ) -> Extrinsic:
+        """
+        Translates a raw decoded extrinsic dict to an Extrinsic model.
+        """
+        call_data = raw_extrinsic.get("call", {})
+        call = ExtrinsicCall(
+            call_module=call_data.get("call_module", ""),
+            call_function=call_data.get("call_function", ""),
+            call_args=call_data.get("call_args", []),
+            **{k: v for k, v in call_data.items() if k not in ("call_module", "call_function", "call_args")},
+        )
+
+        return Extrinsic(
+            block_number=block_number,
+            extrinsic_index=extrinsic_index,
+            extrinsic_hash=ExtrinsicHash(raw_extrinsic.get("extrinsic_hash", "")),
+            extrinsic_length=ExtrinsicLength(raw_extrinsic.get("extrinsic_length", 0)),
+            address=raw_extrinsic.get("address"),
+            call=call,
+            **{
+                k: v
+                for k, v in raw_extrinsic.items()
+                if k not in ("extrinsic_hash", "extrinsic_length", "address", "call")
+            },
+        )
+
 
 SubClient = TypeVar("SubClient", bound=AbstractBittensorClient)
 DelegateReturn = TypeVar("DelegateReturn")
@@ -685,6 +771,12 @@ class BittensorClient(Generic[SubClient], AbstractBittensorClient):
 
     async def get_validators(self, netuid: NetUid, block: Block) -> SubnetValidators:
         return await self._delegate(self.subclient_cls.get_validators, netuid=netuid, block=block)
+
+    async def get_signed_block(self, block: Block) -> SignedBlock | None:
+        return await self._delegate(self.subclient_cls.get_signed_block, block=block)
+
+    async def get_extrinsic(self, block: Block, extrinsic_index: ExtrinsicIndex) -> Extrinsic | None:
+        return await self._delegate(self.subclient_cls.get_extrinsic, block=block, extrinsic_index=extrinsic_index)
 
     async def _delegate(
         self, operation: Callable[..., Awaitable[DelegateReturn]], *args, block: Block | None = None, **kwargs

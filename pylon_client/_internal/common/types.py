@@ -44,6 +44,9 @@ WalletName = NewType("WalletName", str)
 HotkeyName = NewType("HotkeyName", str)
 PylonAuthToken = NewType("PylonAuthToken", str)
 IdentityName = NewType("IdentityName", str)
+ExtrinsicIndex = NewType("ExtrinsicIndex", int)
+ExtrinsicHash = NewType("ExtrinsicHash", str)
+ExtrinsicLength = NewType("ExtrinsicLength", int)
 
 
 class CommitmentDataHex(str):
