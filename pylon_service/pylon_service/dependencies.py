@@ -1,5 +1,4 @@
 from collections.abc import AsyncGenerator
-from typing import TypeVar
 
 from litestar import Request
 from litestar.datastructures import State
@@ -18,8 +17,6 @@ from pylon_service.identities import Identity, identities
 from pylon_service.settings import recent_objects_settings
 from pylon_service.stores import StoreName
 
-BtClient = TypeVar("BtClient", bound=AbstractBittensorClient)
-
 
 async def bt_client_pool_dep(state: State) -> BittensorClientPool:
     """
@@ -37,14 +34,16 @@ async def identity_dep(identity_name: IdentityName) -> Identity:
     raise NotFoundException(f"Identity '{identity_name}' not found")
 
 
-async def bt_client_identity_dep(
+async def bt_client_identity_dep[BtClient: AbstractBittensorClient](
     bt_client_pool: BittensorClientPool[BtClient], identity: Identity
 ) -> AsyncGenerator[BtClient]:
     async with bt_client_pool.acquire(wallet=identity.wallet) as client:
         yield client
 
 
-async def bt_client_open_access_dep(bt_client_pool: BittensorClientPool[BtClient]) -> AsyncGenerator[BtClient]:
+async def bt_client_open_access_dep[BtClient: AbstractBittensorClient](
+    bt_client_pool: BittensorClientPool[BtClient],
+) -> AsyncGenerator[BtClient]:
     async with bt_client_pool.acquire(wallet=None) as client:
         yield client
 

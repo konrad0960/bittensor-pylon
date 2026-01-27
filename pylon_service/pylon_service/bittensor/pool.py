@@ -3,7 +3,7 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from enum import StrEnum
-from typing import Generic, Self, TypeVar
+from typing import Self
 
 from bittensor_wallet import Wallet
 from pydantic import BaseModel, ConfigDict
@@ -38,10 +38,7 @@ class WalletKey(BaseModel):
         )
 
 
-BTClient = TypeVar("BTClient", bound=AbstractBittensorClient)
-
-
-class BittensorClientPool(Generic[BTClient]):
+class BittensorClientPool[BTClient: AbstractBittensorClient]:
     """
     Pool from which bittensor clients can be acquired based on the provided wallet.
     One client is shared for the same wallet.
