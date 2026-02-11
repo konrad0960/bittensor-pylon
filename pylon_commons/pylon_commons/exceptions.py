@@ -1,3 +1,4 @@
+from enum import StrEnum
 from typing import ClassVar
 
 
@@ -11,6 +12,42 @@ class PylonRequestException(BasePylonException):
     """
     Error that pylon client issues when it fails to deliver the request to Pylon.
     """
+
+
+class TimeoutReason(StrEnum):
+    """
+    Reason for a timeout exception.
+    """
+
+    CONNECT = "connect"
+    READ = "read"
+    WRITE = "write"
+    POOL = "pool"
+    GATEWAY_TIMEOUT = "gateway_timeout"
+
+
+class PylonTimeoutException(PylonRequestException):
+    """
+    Error raised when a request to Pylon times out, either client-side or via a 504 Gateway Timeout response.
+    """
+
+    def __init__(
+        self,
+        reason: TimeoutReason,
+        timeout_seconds: float | None = None,
+        detail: str | None = None,
+    ):
+        self.reason = reason
+        self.timeout_seconds = timeout_seconds
+        self.detail = detail
+        msg = f"Request to Pylon API timed out ({reason})"
+        if timeout_seconds is not None:
+            msg += f" after {timeout_seconds}s"
+        if detail:
+            msg += f": {detail}"
+        else:
+            msg += "."
+        super().__init__(msg)
 
 
 class PylonResponseException(BasePylonException):

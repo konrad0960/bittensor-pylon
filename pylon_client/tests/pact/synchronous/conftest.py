@@ -3,10 +3,12 @@ from pathlib import Path
 
 import pytest
 from pact import Pact
+from tenacity import stop_after_attempt
 
+from pylon_client._internal.pylon_commons.timeout import PylonTimeout
 from pylon_client._internal.pylon_commons.types import PylonAuthToken
 from pylon_client._internal.sync.client import PylonClient
-from pylon_client._internal.sync.config import Config
+from pylon_client._internal.sync.config import DEFAULT_RETRIES, Config
 
 
 @pytest.fixture(scope="session")
@@ -38,6 +40,8 @@ def pylon_client_factory():
         config = Config(
             address=address,
             open_access_token=PylonAuthToken("test_token"),
+            timeout=PylonTimeout(read=0.5),
+            retry=DEFAULT_RETRIES.copy(stop=stop_after_attempt(1)),
         )
         return PylonClient(config)
 
