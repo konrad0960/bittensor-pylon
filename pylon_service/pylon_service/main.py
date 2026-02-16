@@ -13,7 +13,7 @@ from pylon_service.prometheus_controller import AuthenticatedPrometheusControlle
 from pylon_service.routers import v1_router
 from pylon_service.schema import PylonSchemaPlugin
 from pylon_service.sentry_config import init_sentry
-from pylon_service.settings import settings
+from pylon_service.settings import response_cache_config, settings
 from pylon_service.stores import stores
 
 
@@ -42,6 +42,7 @@ def create_app() -> Litestar:
         plugins=[PylonSchemaPlugin()],
         exception_handlers={ArchiveFallbackException: archive_fallback_handler},
         stores=stores,
+        response_cache_config=response_cache_config,
         debug=settings.debug,
         logging_config=litestar_logging_config(),
     )
