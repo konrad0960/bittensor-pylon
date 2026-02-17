@@ -590,12 +590,14 @@ class TurboBtClient(AbstractBittensorClient):
     async def get_commitment(self, netuid: NetUid, block: Block, hotkey: Hotkey | None = None) -> Commitment | None:
         hotkey = self._resolve_hotkey(hotkey)
         logger.debug(f"Fetching commitment for {hotkey} from subnet {netuid} at block {block.number}, {self.uri}")
-        commitment = await self._protect_turbobt(
-            lambda c: c.subnet(netuid).commitments.get(hotkey, block_hash=block.hash)
-        )
-        if commitment is None:
+        result = await self._protect_turbobt(lambda c: c.subnet(netuid).commitments.get(hotkey, block_hash=block.hash))
+        if result is None:
             return None
-        return Commitment(block=block, hotkey=hotkey, commitment=CommitmentDataBytes(commitment).hex())
+        return Commitment(
+            commitment_block_number=BlockNumber(result["block"]),
+            hotkey=hotkey,
+            commitment=CommitmentDataBytes(result["data"]).hex(),
+        )
 
     @track_operation(
         bittensor_operation_duration,
@@ -607,11 +609,18 @@ class TurboBtClient(AbstractBittensorClient):
     )
     async def get_commitments(self, netuid: NetUid, block: Block) -> SubnetCommitments:
         logger.debug(f"Fetching all commitments from subnet {netuid} at block {block.number}, {self.uri}")
-        commitments = await self._protect_turbobt(lambda c: c.subnet(netuid).commitments.fetch(block_hash=block.hash))
-        return SubnetCommitments(
-            block=block,
-            commitments={Hotkey(hotkey): CommitmentDataBytes(data).hex() for hotkey, data in commitments.items()},
+        raw_commitments = await self._protect_turbobt(
+            lambda c: c.subnet(netuid).commitments.fetch(block_hash=block.hash)
         )
+        commitments: dict[Hotkey, Commitment] = {}
+        for hotkey_str, result in raw_commitments.items():
+            hotkey = Hotkey(hotkey_str)
+            commitments[hotkey] = Commitment(
+                commitment_block_number=BlockNumber(result["block"]),
+                hotkey=hotkey,
+                commitment=CommitmentDataBytes(result["data"]).hex(),
+            )
+        return SubnetCommitments(block=block, commitments=commitments)
 
     @track_operation(
         bittensor_operation_duration,

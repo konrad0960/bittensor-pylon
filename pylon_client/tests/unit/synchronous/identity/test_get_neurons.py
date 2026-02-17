@@ -3,16 +3,16 @@ from http import HTTPMethod
 import pytest
 from httpx import Response, codes
 
-from pylon_client._internal.pylon_commons.endpoints import Endpoint
 from pylon_client._internal.pylon_commons.models import Block
-from pylon_client._internal.pylon_commons.responses import GetNeuronsResponse
 from pylon_client._internal.pylon_commons.types import BlockHash, BlockNumber
+from pylon_client._internal.pylon_commons.v1.endpoints import Endpoint as EndpointV1
+from pylon_client._internal.pylon_commons.v1.responses import GetNeuronsResponse
 from tests.factories import NeuronFactory
 from tests.unit.synchronous.base_test import IdentityEndpointTest
 
 
 class TestSyncIdentityGetNeurons(IdentityEndpointTest):
-    endpoint = Endpoint.NEURONS
+    endpoint = EndpointV1.NEURONS
     route_params = {"identity_name": "sn1", "netuid": 1, "block_number": 1000}
     http_method = HTTPMethod.GET
 

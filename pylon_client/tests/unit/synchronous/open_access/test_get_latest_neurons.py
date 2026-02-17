@@ -2,16 +2,16 @@ from http import HTTPMethod
 
 import pytest
 
-from pylon_client._internal.pylon_commons.endpoints import Endpoint
 from pylon_client._internal.pylon_commons.models import Block
-from pylon_client._internal.pylon_commons.responses import GetNeuronsResponse
 from pylon_client._internal.pylon_commons.types import BlockHash, BlockNumber, NetUid
+from pylon_client._internal.pylon_commons.v1.endpoints import Endpoint as EndpointV1
+from pylon_client._internal.pylon_commons.v1.responses import GetNeuronsResponse
 from tests.factories import NeuronFactory
 from tests.unit.synchronous.base_test import OpenAccessEndpointTest
 
 
 class TestSyncOpenAccessGetLatestNeurons(OpenAccessEndpointTest):
-    endpoint = Endpoint.LATEST_NEURONS
+    endpoint = EndpointV1.LATEST_NEURONS
     route_params = {"netuid": 1}
     http_method = HTTPMethod.GET
 

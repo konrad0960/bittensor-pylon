@@ -3,25 +3,23 @@ import logging
 from litestar import Controller, Response, status_codes
 from litestar.di import Provide
 from litestar.exceptions import NotFoundException, ServiceUnavailableException
-from litestar.handlers.http_handlers import decorators as http_decorators
-from pylon_commons.bodies import LoginBody, SetCommitmentBody, SetWeightsBody
-from pylon_commons.endpoints import Endpoint
-from pylon_commons.models import (
-    BlockInfoBag,
-    Commitment,
-    Extrinsic,
-    Hotkey,
-    NeuronCertificate,
-    SubnetCommitments,
-    SubnetNeurons,
-    SubnetValidators,
+from pylon_commons._unstable.bodies import LoginBody, SetCommitmentBody, SetWeightsBody
+from pylon_commons._unstable.endpoints import Endpoint
+from pylon_commons._unstable.requests import GenerateCertificateKeypairRequest
+from pylon_commons._unstable.responses import (
+    GetCommitmentResponse,
+    GetCommitmentsResponse,
+    GetExtrinsicResponse,
+    GetLatestBlockInfoResponse,
+    GetNeuronsResponse,
+    GetValidatorsResponse,
+    IdentityLoginResponse,
 )
-from pylon_commons.requests import (
-    GenerateCertificateKeypairRequest,
-)
-from pylon_commons.responses import IdentityLoginResponse
+from pylon_commons.models import Hotkey, NeuronCertificate, SubnetNeurons
 from pylon_commons.types import BlockNumber, ExtrinsicIndex, NetUid
 
+from pylon_service.api._unstable.tasks import ApplyWeights, SetCommitment
+from pylon_service.api.utils import handler
 from pylon_service.bittensor.client import AbstractBittensorClient
 from pylon_service.bittensor.recent import RecentObjectMissing, RecentObjectProvider, RecentObjectStale
 from pylon_service.dependencies import (
@@ -33,21 +31,8 @@ from pylon_service.dependencies import (
 )
 from pylon_service.exceptions import BadGatewayException
 from pylon_service.identities import Identity
-from pylon_service.tasks import ApplyWeights, SetCommitment
 
 logger = logging.getLogger(__name__)
-
-
-def handler(endpoint: Endpoint, **kwargs):
-    """
-    Decorator to create litestar handlers using endpoints defined in Endpoint enum.
-    It is encouraged to define handlers with Endpoint enum so that Pylon service can share endpoint info
-    with Pylon client.
-    The decorator automatically sets the proper url, name and method for the endpoint,
-    other kwargs may be set by passing them to this decorator.
-    """
-    method = getattr(http_decorators, endpoint.method.lower())
-    return method(endpoint.url, name=endpoint.reverse, **kwargs)
 
 
 @handler(
@@ -65,13 +50,13 @@ async def identity_login(data: LoginBody, identity: Identity) -> IdentityLoginRe
     cache=3,
     dependencies={"bt_client": Provide(bt_client_open_access_dep)},
 )
-async def get_latest_block_info_endpoint(bt_client: AbstractBittensorClient) -> BlockInfoBag:
+async def get_latest_block_info_endpoint(bt_client: AbstractBittensorClient) -> GetLatestBlockInfoResponse:
     """
     Get latest block info - here "latest" meaning at most a couple of seconds old.
     """
     block = await bt_client.get_latest_block()
     timestamp = await bt_client.get_block_timestamp(block)
-    return BlockInfoBag(number=block.number, hash=block.hash, timestamp=timestamp)
+    return GetLatestBlockInfoResponse(number=block.number, hash=block.hash, timestamp=timestamp)
 
 
 @handler(
@@ -80,7 +65,7 @@ async def get_latest_block_info_endpoint(bt_client: AbstractBittensorClient) -> 
 )
 async def get_extrinsic_endpoint(
     bt_client: AbstractBittensorClient, block_number: BlockNumber, extrinsic_index: ExtrinsicIndex
-) -> Extrinsic:
+) -> GetExtrinsicResponse:
     """
     Get a decoded extrinsic from a specific block.
 
@@ -95,7 +80,7 @@ async def get_extrinsic_endpoint(
     extrinsic = await bt_client.get_extrinsic(block, extrinsic_index)
     if extrinsic is None:
         raise NotFoundException(detail=f"Extrinsic {block_number}-{extrinsic_index} not found.")
-    return extrinsic
+    return GetExtrinsicResponse.model_validate(extrinsic, from_attributes=True)
 
 
 class OpenAccessController(Controller):
@@ -108,7 +93,7 @@ class OpenAccessController(Controller):
     @handler(Endpoint.NEURONS)
     async def get_neurons(
         self, bt_client: AbstractBittensorClient, block_number: BlockNumber, netuid: NetUid
-    ) -> SubnetNeurons:
+    ) -> GetNeuronsResponse:
         """
         Get a metagraph for a block.
 
@@ -120,17 +105,20 @@ class OpenAccessController(Controller):
         block = await bt_client.get_block(block_number)
         if block is None:
             raise NotFoundException(detail=f"Block {block_number} not found.")
-        return await bt_client.get_neurons(netuid, block=block)
+        result = await bt_client.get_neurons(netuid, block=block)
+        return GetNeuronsResponse.model_validate(result, from_attributes=True)
 
     @handler(Endpoint.LATEST_NEURONS)
-    async def get_latest_neurons(self, bt_client: AbstractBittensorClient, netuid: NetUid) -> SubnetNeurons:
+    async def get_latest_neurons(self, bt_client: AbstractBittensorClient, netuid: NetUid) -> GetNeuronsResponse:
         block = await bt_client.get_latest_block()
-        return await bt_client.get_neurons(netuid, block=block)
+        result = await bt_client.get_neurons(netuid, block=block)
+        return GetNeuronsResponse.model_validate(result, from_attributes=True)
 
     @handler(Endpoint.RECENT_NEURONS)
-    async def get_recent_neurons(self, recent_object_provider: RecentObjectProvider) -> SubnetNeurons:
+    async def get_recent_neurons(self, recent_object_provider: RecentObjectProvider) -> GetNeuronsResponse:
         try:
-            return await recent_object_provider.get(SubnetNeurons)
+            result = await recent_object_provider.get(SubnetNeurons)
+            return GetNeuronsResponse.model_validate(result, from_attributes=True)
         except RecentObjectMissing as e:
             raise ServiceUnavailableException(
                 "Recent neurons data is not available. Cache update may not have finished "
@@ -142,7 +130,7 @@ class OpenAccessController(Controller):
     @handler(Endpoint.VALIDATORS)
     async def get_validators(
         self, bt_client: AbstractBittensorClient, block_number: BlockNumber, netuid: NetUid
-    ) -> SubnetValidators:
+    ) -> GetValidatorsResponse:
         """
         Get validators (neurons with validator_permit=True) for a block, sorted by total stake descending.
 
@@ -152,15 +140,17 @@ class OpenAccessController(Controller):
         block = await bt_client.get_block(block_number)
         if block is None:
             raise NotFoundException(detail=f"Block {block_number} not found.")
-        return await bt_client.get_validators(netuid, block=block)
+        result = await bt_client.get_validators(netuid, block=block)
+        return GetValidatorsResponse.model_validate(result, from_attributes=True)
 
     @handler(Endpoint.LATEST_VALIDATORS)
-    async def get_latest_validators(self, bt_client: AbstractBittensorClient, netuid: NetUid) -> SubnetValidators:
+    async def get_latest_validators(self, bt_client: AbstractBittensorClient, netuid: NetUid) -> GetValidatorsResponse:
         """
         Get validators (neurons with validator_permit=True) at the latest block, sorted by total stake descending.
         """
         block = await bt_client.get_latest_block()
-        return await bt_client.get_validators(netuid, block=block)
+        result = await bt_client.get_validators(netuid, block=block)
+        return GetValidatorsResponse.model_validate(result, from_attributes=True)
 
     @handler(Endpoint.CERTIFICATES)
     async def get_certificates_endpoint(
@@ -190,17 +180,20 @@ class OpenAccessController(Controller):
         return certificate
 
     @handler(Endpoint.LATEST_COMMITMENTS)
-    async def get_commitments_endpoint(self, bt_client: AbstractBittensorClient, netuid: NetUid) -> SubnetCommitments:
+    async def get_commitments_endpoint(
+        self, bt_client: AbstractBittensorClient, netuid: NetUid
+    ) -> GetCommitmentsResponse:
         """
         Get all commitments for the subnet.
         """
         block = await bt_client.get_latest_block()
-        return await bt_client.get_commitments(netuid, block)
+        result = await bt_client.get_commitments(netuid, block)
+        return GetCommitmentsResponse.model_validate(result, from_attributes=True)
 
     @handler(Endpoint.LATEST_COMMITMENTS_HOTKEY)
     async def get_commitment_endpoint(
         self, hotkey: Hotkey, bt_client: AbstractBittensorClient, netuid: NetUid
-    ) -> Commitment:
+    ) -> GetCommitmentResponse:
         """
         Get a specific commitment for a hotkey.
 
@@ -211,7 +204,7 @@ class OpenAccessController(Controller):
         commitment = await bt_client.get_commitment(netuid, block, hotkey=hotkey)
         if commitment is None:
             raise NotFoundException(detail="Commitment not found.")
-        return commitment
+        return GetCommitmentResponse(block=block, **commitment.model_dump())
 
 
 class IdentityController(OpenAccessController):
@@ -274,7 +267,9 @@ class IdentityController(OpenAccessController):
         return Response(certificate, status_code=status_codes.HTTP_200_OK)
 
     @handler(Endpoint.LATEST_COMMITMENTS_SELF)
-    async def get_own_commitment_endpoint(self, bt_client: AbstractBittensorClient, netuid: NetUid) -> Commitment:
+    async def get_own_commitment_endpoint(
+        self, bt_client: AbstractBittensorClient, netuid: NetUid
+    ) -> GetCommitmentResponse:
         """
         Get a commitment for the identity's wallet.
 
@@ -285,7 +280,7 @@ class IdentityController(OpenAccessController):
         commitment = await bt_client.get_commitment(netuid, block)
         if commitment is None:
             raise NotFoundException(detail="Commitment not found.")
-        return commitment
+        return GetCommitmentResponse(block=block, **commitment.model_dump())
 
     @handler(Endpoint.CERTIFICATES_GENERATE)
     async def generate_certificate_keypair_endpoint(
@@ -302,3 +297,11 @@ class IdentityController(OpenAccessController):
             raise BadGatewayException(detail="Could not generate certificate pair.")
 
         return Response(certificate_keypair, status_code=status_codes.HTTP_201_CREATED)
+
+
+__all__ = [
+    "OpenAccessController",
+    "IdentityController",
+    "identity_login",
+    "get_extrinsic_endpoint",
+]

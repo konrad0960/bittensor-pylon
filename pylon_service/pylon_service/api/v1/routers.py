@@ -1,7 +1,7 @@
 from litestar import Router
 from pylon_commons.apiver import ApiVersion
 
-from pylon_service.api import (
+from pylon_service.api.v1.api import (
     IdentityController,
     OpenAccessController,
     get_extrinsic_endpoint,

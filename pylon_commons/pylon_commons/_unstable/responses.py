@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 
-from .models import (
+from ..models import (
+    Block,
     BlockInfoBag,
     Commitment,
     Extrinsic,
@@ -8,7 +9,7 @@ from .models import (
     SubnetNeurons,
     SubnetValidators,
 )
-from .types import IdentityName, NetUid
+from ..types import IdentityName, NetUid
 
 
 class PylonResponse(BaseModel):
@@ -86,7 +87,7 @@ class GetCommitmentResponse(PylonResponse, Commitment):
     Response class that is returned for the GetCommitmentRequest.
     """
 
-    pass
+    block: Block
 
 
 class GetCommitmentsResponse(PylonResponse, SubnetCommitments):

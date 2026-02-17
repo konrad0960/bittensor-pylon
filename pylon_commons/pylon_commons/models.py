@@ -189,14 +189,14 @@ class SubnetState(BittensorModel):
 
 
 class Commitment(BittensorModel):
-    block: Block
+    commitment_block_number: BlockNumber
     hotkey: Hotkey
     commitment: CommitmentDataHex
 
 
 class SubnetCommitments(BittensorModel):
     block: Block
-    commitments: dict[Hotkey, CommitmentDataHex]
+    commitments: dict[Hotkey, Commitment]
 
 
 class ExtrinsicCallArg(BittensorModel):

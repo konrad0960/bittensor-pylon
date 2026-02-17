@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from unittest.mock import AsyncMock
 
 from pylon_commons.models import Commitment, SubnetCommitments, SubnetNeurons, SubnetValidators
-from pylon_commons.types import CommitmentDataHex, Hotkey, Timestamp
+from pylon_commons.types import BlockNumber, CommitmentDataHex, Hotkey, Timestamp
 
 from pylon_service.bittensor.exceptions import ArchiveFallbackException
 from pylon_service.bittensor.recent.adapter import _CacheEntry
@@ -167,7 +167,12 @@ class CommitmentsExistHandler(StateHandler):
     def setup(self, parameters: dict[str, Any]) -> None:
         block = BlockFactory.build()
         commitments = {
-            Hotkey(f"h{i}"): CommitmentDataHex("0xaabbccdd") for i in range(parameters.get("commitment_count", 1))
+            Hotkey(f"h{i}"): Commitment(
+                commitment_block_number=BlockNumber(block.number - 50),
+                hotkey=Hotkey(f"h{i}"),
+                commitment=CommitmentDataHex("0xaabbccdd"),
+            )
+            for i in range(parameters.get("commitment_count", 1))
         }
         subnet_commitments = SubnetCommitments(block=block, commitments=commitments)
 
@@ -183,7 +188,7 @@ class CommitmentExistsHandler(StateHandler):
         block = BlockFactory.build()
         hotkey = Hotkey(parameters["hotkey"])
         commitment = Commitment(
-            block=block,
+            commitment_block_number=BlockNumber(block.number - 50),
             hotkey=hotkey,
             commitment=CommitmentDataHex("0xaabbccdd"),
         )
@@ -200,7 +205,7 @@ class OwnCommitmentExistsHandler(StateHandler):
         block = BlockFactory.build()
         hotkey = Hotkey(parameters["hotkey"])
         commitment = Commitment(
-            block=block,
+            commitment_block_number=BlockNumber(block.number - 50),
             hotkey=hotkey,
             commitment=CommitmentDataHex("0xaabbccdd"),
         )
@@ -238,7 +243,7 @@ class WeightsCanBeSetHandler(StateHandler):
     name = "weights can be set"
 
     def setup(self, parameters: dict[str, Any]) -> None:
-        self.monkeypatch.setattr("pylon_service.api.ApplyWeights.schedule", AsyncMock())
+        self.monkeypatch.setattr("pylon_service.api._unstable.api.ApplyWeights.schedule", AsyncMock())
 
 
 class BlockDataUnavailableHandler(StateHandler):

@@ -3,16 +3,16 @@ from http import HTTPMethod
 import pytest
 from httpx import Response, codes
 
-from pylon_client._internal.pylon_commons.endpoints import Endpoint
 from pylon_client._internal.pylon_commons.models import Block
-from pylon_client._internal.pylon_commons.responses import GetValidatorsResponse
 from pylon_client._internal.pylon_commons.types import BlockHash, BlockNumber, NetUid
+from pylon_client._internal.pylon_commons.v1.endpoints import Endpoint as EndpointV1
+from pylon_client._internal.pylon_commons.v1.responses import GetValidatorsResponse
 from tests.factories import NeuronFactory
 from tests.unit.asynchronous.base_test import OpenAccessEndpointTest
 
 
 class TestOpenAccessGetLatestValidators(OpenAccessEndpointTest):
-    endpoint = Endpoint.LATEST_VALIDATORS
+    endpoint = EndpointV1.LATEST_VALIDATORS
     route_params = {"netuid": 1}
     http_method = HTTPMethod.GET
 
